@@ -9,16 +9,20 @@ import (
 	"time"
 
 	"github.com/TezzBhandari/pong"
+	"github.com/TezzBhandari/pong/ws"
+	"github.com/bwmarrin/snowflake"
 	"github.com/gorilla/mux"
 )
 
 const shutdownTimeout = 10 * time.Second
 
 type Server struct {
-	server *http.Server
-	router *mux.Router
-	ln     net.Listener
-	addr   string
+	server    *http.Server
+	router    *mux.Router
+	ln        net.Listener
+	addr      string
+	snowflake *snowflake.Node
+	Relay     *ws.Relay
 }
 
 func NewHttpServer(addr string) *Server {
@@ -33,17 +37,31 @@ func NewHttpServer(addr string) *Server {
 		addr:   addr,
 	}
 
+	relay := ws.NewRelay()
+
+	s.Relay = relay
+
 	s.router.Use(reportPanic)
 	s.server.Handler = s.ServeHttp()
 	s.router.NotFoundHandler = s.handleNotFound()
 	router := s.router.PathPrefix("/").Subrouter()
 	router.Handle("/", s.handleIndex())
+	router.Handle("/ws", s.handleWebsocketConnection())
 
 	return s
 }
 
 func (s *Server) Open() error {
 	var err error
+
+	snowflake, err := snowflake.NewNode(1)
+	if err != nil {
+		return err
+	}
+
+	s.snowflake = snowflake
+
+	go s.Relay.Run()
 
 	if s.ln, err = net.Listen("tcp", s.addr); err != nil {
 		return err
@@ -118,7 +136,6 @@ func (s *Server) handleIndex() http.Handler {
 func (s *Server) Port() int {
 	if s.ln != nil {
 		return 0
-
 	}
 	return s.ln.Addr().(*net.TCPAddr).Port
 }

@@ -45,7 +45,7 @@ type Main struct {
 
 func NewMain() *Main {
 	return &Main{
-		HTTPServer: http.NewHttpServer(":9090"),
+		HTTPServer: http.NewHttpServer("192.168.1.100:9090"),
 	}
 }
 
